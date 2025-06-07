@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Gravity Particles</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: sans-serif;
+            cursor: none;
+        }
+        canvas {
+            display: block;
+        }
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+            padding: 10px;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            background-color: #444;
+            color: white;
+            border: 1px solid #666;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+        button:hover {
+            background-color: #666;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+
+    <div id="controls">
+        <button id="modeButton">Mode: Attract</button>
+        <button id="colorButton">Color: Velocity</button>
+        <button id="trailButton">Trails: Long</button>
+        <button id="resetButton">Reset Particles</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // --- Configuration ---
+        let config = {
+            particleCount: 300,
+            gravityMode: 'attract', // 'attract' or 'repel'
+            colorMode: 'velocity', // 'velocity', 'static', 'pulse'
+            trailAmount: 0.1, // Lower numbers mean longer trails
+            maxVelocity: 3,
+            friction: 0.98,
+        };
+
+        const mouse = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+        };
+
+        let particlesArray = [];
+        let baseHue = 0;
+
+        // --- Particle Class ---
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = 0;
+                this.vy = 0;
+                this.size = Math.random() * 2 + 1;
+                this.color = 'hsl(0, 100%, 50%)';
+            }
+
+            // Update particle position based on velocity
+            update() {
+                const dx = mouse.x - this.x;
+                const dy = mouse.y - this.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < 1) distance = 1;
+
+                const force = (100 / (distance * distance));
+                const accelerationX = (dx / distance) * force;
+                const accelerationY = (dy / distance) * force;
+
+                if (config.gravityMode === 'attract') {
+                    this.vx += accelerationX;
+                    this.vy += accelerationY;
+                } else {
+                    this.vx -= accelerationX;
+                    this.vy -= accelerationY;
+                }
+
+                // Apply friction
+                this.vx *= config.friction;
+                this.vy *= config.friction;
+
+                // Clamp velocity
+                const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                if (speed > config.maxVelocity) {
+                    this.vx = (this.vx / speed) * config.maxVelocity;
+                    this.vy = (this.vy / speed) * config.maxVelocity;
+                }
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Update color based on mode
+                this.updateColor();
+            }
+
+            updateColor() {
+                switch (config.colorMode) {
+                    case 'velocity':
+                        const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                        const hue = 240 - (speed / config.maxVelocity) * 120; // Blue to Red
+                        this.color = `hsl(${hue}, 100%, 50%)`;
+                        break;
+                    case 'static':
+                        this.color = `hsl(${baseHue}, 80%, 60%)`;
+                        break;
+                    case 'pulse':
+                        const pulseHue = (baseHue + (this.x * 0.5)) % 360;
+                        this.color = `hsl(${pulseHue}, 80%, 60%)`;
+                        break;
+                }
+            }
+
+            // Draw the particle
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // --- Initialization and Animation Loop ---
+        function init() {
+            particlesArray = [];
+            for (let i = 0; i < config.particleCount; i++) {
+                particlesArray.push(new Particle());
+            }
+        }
+
+        function animate() {
+            // Create the trailing effect by semi-transparent background
+            ctx.fillStyle = `rgba(0, 0, 0, ${config.trailAmount})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            baseHue = (baseHue + 1) % 360; // For pulse/static color modes
+
+            particlesArray.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            // Draw mouse cursor circle
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(mouse.x, mouse.y, 15, 0, Math.PI * 2);
+            ctx.stroke();
+
+            requestAnimationFrame(animate);
+        }
+
+        // --- Event Listeners & Controls ---
+        const modeButton = document.getElementById('modeButton');
+        const colorButton = document.getElementById('colorButton');
+        const trailButton = document.getElementById('trailButton');
+        const resetButton = document.getElementById('resetButton');
+
+        modeButton.addEventListener('click', () => {
+            config.gravityMode = config.gravityMode === 'attract' ? 'repel' : 'attract';
+            modeButton.textContent = `Mode: ${config.gravityMode === 'attract' ? 'Attract' : 'Repel'}`;
+        });
+
+        colorButton.addEventListener('click', () => {
+            const modes = ['velocity', 'static', 'pulse'];
+            const currentIndex = modes.indexOf(config.colorMode);
+            config.colorMode = modes[(currentIndex + 1) % modes.length];
+            colorButton.textContent = `Color: ${config.colorMode.charAt(0).toUpperCase() + config.colorMode.slice(1)}`;
+        });
+
+        trailButton.addEventListener('click', () => {
+            const trails = { 'Long': 0.1, 'Medium': 0.3, 'Short': 0.8 };
+            const trailNames = Object.keys(trails);
+            const currentTrailValue = config.trailAmount;
+            const currentIndex = Object.values(trails).indexOf(currentTrailValue);
+            const nextIndex = (currentIndex + 1) % trailNames.length;
+            config.trailAmount = trails[trailNames[nextIndex]];
+            trailButton.textContent = `Trails: ${trailNames[nextIndex]}`;
+        });
+
+        resetButton.addEventListener('click', () => {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            init();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            init();
+        });
+
+        // --- Start ---
+        init();
+        animate();
+    </script>
+</body>
+</html>

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive Connected Particles</title>
+<style>
+body {
+margin: 0;
+overflow: hidden;
+background-color: #111;
+font-family: sans-serif;
+display: flex;
+justify-content: center;
+align-items: flex-start;
+}
+canvas {
+display: block;
+}
+#controls {
+position: absolute;
+top: 20px;
+left: 20px;
+background: rgba(0, 0, 0, 0.5);
+color: white;
+padding: 15px;
+border-radius: 10px;
+display: flex;
+flex-direction: column;
+gap: 10px;
+}
+button {
+background-color: #333;
+color: white;
+border: none;
+padding: 10px 15px;
+border-radius: 5px;
+cursor: pointer;
+transition: background-color 0.3s;
+}
+button:hover {
+background-color: #555;
+}
+</style>
+</head>
+<body>
+
+<canvas id="particleCanvas"></canvas>
+
+<div id="controls">
+    <button id="colorButton">Cycle Colors</button>
+    <button id="shapeButton">Change Formation</button>
+    <button id="densityButton">Change Density</button>
+    <button id="connectionButton">Toggle Connections</button>
+    <button id="resetButton">Reset</button>
+</div>
+
+<script>
+    const canvas = document.getElementById('particleCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let particlesArray = [];
+    let numberOfParticles = 100;
+    let connectionDistance = 120;
+    let showConnections = true;
+
+    let baseHue = 0;
+
+    // Particle properties
+    let particleSize = 2;
+    let particleSpeed = 0.5;
+
+    const formations = ['random', 'circle', 'square', 'triangle'];
+    let currentFormationIndex = 0;
+    let targetPositions = [];
+
+    class Particle {
+        constructor(x, y, size, hue, speedX, speedY) {
+            this.x = x;
+            this.y = y;
+            this.size = size;
+            this.hue = hue;
+            this.speedX = speedX;
+            this.speedY = speedY;
+            this.targetX = x;
+            this.targetY = y;
+        }
+
+        update() {
+            this.x += (this.targetX - this.x) * 0.05 + this.speedX * particleSpeed;
+            this.y += (this.targetY - this.y) * 0.05 + this.speedY * particleSpeed;
+
+            if (this.x > canvas.width || this.x < 0) {
+                this.speedX = -this.speedX * 0.5;
+            }
+            if (this.y > canvas.height || this.y < 0) {
+                this.speedY = -this.speedY * 0.5;
+            }
+        }
+
+        draw() {
+            ctx.fillStyle = `hsl(${this.hue}, 70%, 50%)`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.fill();
+        }
+    }
+
+    function init() {
+        particlesArray = [];
+        for (let i = 0; i < numberOfParticles; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * particleSize + 1;
+            const hue = baseHue + (i * (360 / numberOfParticles));
+            const speedX = (Math.random() * 2 - 1) * 0.2;
+            const speedY = (Math.random() * 2 - 1) * 0.2;
+            particlesArray.push(new Particle(x, y, size, hue, speedX, speedY));
+        }
+        updateTargetPositions(formations[(currentFormationIndex) % formations.length]);
+    }
+
+    function updateTargetPositions(formation) {
+        targetPositions = [];
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.min(centerX, centerY) * 0.8;
+
+        for (let i = 0; i < numberOfParticles; i++) {
+            let x = Math.random() * canvas.width;
+            let y = Math.random() * canvas.height;
+
+            if (formation === 'circle') {
+                const angle = (i / numberOfParticles) * Math.PI * 2;
+                x = centerX + radius * Math.cos(angle);
+                y = centerY + radius * Math.sin(angle);
+            } else if (formation === 'square') {
+                const side = Math.sqrt(numberOfParticles);
+                const padding = radius / 2;
+                const row = Math.floor(i / side);
+                const col = i % side;
+                x = centerX - padding + (col / (side - 1)) * (padding * 2) + (Math.random() - 0.5) * 50;
+                y = centerY - padding + (row / (side - 1)) * (padding * 2) + (Math.random() - 0.5) * 50;
+            } else if (formation === 'triangle') {
+                const rows = Math.floor((-1 + Math.sqrt(1 + 8 * numberOfParticles)) / 2);
+                let k = 0;
+                for (let iRow = 0; iRow < rows; iRow++) {
+                    for (let j = 0; j <= iRow; j++) {
+                        if (k === i) {
+                            const triangleBase = radius;
+                            const triangleHeight = Math.sqrt(3) / 2 * triangleBase;
+                            const startX = centerX - triangleBase / 2;
+                            const startY = centerY + triangleHeight / 3;
+                            const offsetX = (j - iRow / 2) * (triangleBase / rows);
+                            const offsetY = -iRow * (triangleHeight / (rows * 1.5));
+                            x = startX + offsetX + (Math.random() - 0.5) * 50;
+                            y = startY + offsetY + (Math.random() - 0.5) * 50;
+                            break;
+                        }
+                        k++;
+                    }
+                    if (k > i) break;
+                }
+            }
+            targetPositions.push({ x: x, y: y });
+        }
+
+        particlesArray.forEach((p, index) => {
+            if (targetPositions.length > index) {
+                p.targetX = targetPositions [index].x;
+                p.targetY = targetPositions [index].y;
+            }
+        });
+    }
+
+    function drawConnections() {
+        if (!showConnections) return;
+        for (let a = 0; a < particlesArray.length; a++) {
+            for (let b = a; b < particlesArray.length; b++) {
+                const dx = particlesArray [a].x - particlesArray [b].x;
+                const dy = particlesArray [a].y - particlesArray [b].y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < connectionDistance) {
+                    ctx.strokeStyle = `hsla(${particlesArray [a].hue}, 70%, 50%, ${1 - distance / connectionDistance})`;
+                    ctx.lineWidth = 0.5;
+                    ctx.beginPath();
+                    ctx.moveTo(particlesArray [a].x, particlesArray [a].y);
+                    ctx.lineTo(particlesArray [b].x, particlesArray [b].y);
+                    ctx.stroke();
+                }
+            }
+        }
+    }
+
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawConnections();
+        particlesArray.forEach(particle => {
+            particle.update();
+            particle.draw();
+        });
+        baseHue = (baseHue + 1) % 360;
+        particlesArray.forEach((p, i) => p.hue = baseHue + (i * (360 / numberOfParticles)));
+        requestAnimationFrame(animate);
+    }
+
+    // --- Controls ---
+    const colorButton = document.getElementById('colorButton');
+    const shapeButton = document.getElementById('shapeButton');
+    const densityButton = document.getElementById('densityButton');
+    const connectionButton = document.getElementById('connectionButton');
+    const resetButton = document.getElementById('resetButton');
+
+    colorButton.addEventListener('click', () => {
+        // Color cycling is handled in the animation loop
+    });
+
+    shapeButton.addEventListener('click', () => {
+        currentFormationIndex++;
+        updateTargetPositions(formations[(currentFormationIndex) % formations.length]);
+    });
+
+    densityButton.addEventListener('click', () => {
+        numberOfParticles = (numberOfParticles === 50) ? 150 : (numberOfParticles === 150 ? 250 : 50);
+        init();
+    });
+
+    connectionButton.addEventListener('click', () => {
+        showConnections = !showConnections;
+    });
+
+    resetButton.addEventListener('click', () => {
+        numberOfParticles = 100;
+        connectionDistance = 120;
+        showConnections = true;
+        currentFormationIndex = 0;
+        particleSize = 2;
+        particleSpeed = 0.5;
+        init();
+    });
+
+    window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        init();
+    });
+
+    init();
+    animate();
+</script>
+
+</body>
+</html>
